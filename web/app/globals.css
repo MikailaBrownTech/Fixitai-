@@ -1,16 +1,466 @@
-:root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #0b5cd5; --border: #ccc; }
-@media (prefers-color-scheme: dark) { :root { --bg: #14161a; --fg: #eee; --muted: #aaa; --accent: #7fb0ff; --border: #444; } }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
-main { max-width: 42rem; margin: 0 auto; padding: 1rem; }
-.lead, footer { color: var(--muted); }
-form { display: grid; gap: .5rem; margin: 1.5rem 0; }
-input { padding: .6rem; font: inherit; border: 1px solid var(--border); border-radius: .4rem; background: var(--bg); color: var(--fg); }
-button { padding: .6rem 1rem; font: inherit; border: 0; border-radius: .4rem; background: var(--accent); color: var(--bg); cursor: pointer; }
-button:disabled { opacity: .6; cursor: progress; }
-a { color: var(--accent); }
-.items { list-style: none; padding: 0; }
-.items li { padding: .75rem 0; border-bottom: 1px solid var(--border); }
-.items p { margin: .25rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
-.notice { padding: .75rem; border: 1px solid var(--border); border-radius: .4rem; }
-footer { margin-top: 3rem; font-size: .875rem; }
+/* FixItFast. Tokens first, then layout, then components.
+   No inline styles anywhere (the site's Content Security Policy forbids them), so every visual
+   decision lives here. */
+
+:root {
+  color-scheme: light dark;
+
+  /* Porcelain, graphite and one accent: the blue of a gas burner. */
+  --page: #f4f5f5;
+  --surface: #ffffff;
+  --ink: #16202a;
+  --slate: #4c5a67;
+  --hairline: #d8dde1;
+  --hairline-strong: #b9c1c8;
+  --accent: #0f5bdb;
+  --accent-hover: #0b49b3;
+  --on-accent: #ffffff;
+  --focus: #0f5bdb;
+
+  --radius-field: 14px;
+  --radius-control: 10px;
+  --radius-tag: 6px;
+
+  --font: 'Atkinson Hyperlegible Next Variable', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0f151b;
+    --surface: #161e26;
+    --ink: #e8edf1;
+    --slate: #9aa8b5;
+    --hairline: #26313b;
+    --hairline-strong: #3a4753;
+    --accent: #6ea1ff;
+    --accent-hover: #93b9ff;
+    --on-accent: #0b1219;
+    --focus: #8db3ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p,
+dl,
+dd,
+ul {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Page frame ---------- */
+
+.shell {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.wordmark {
+  font-weight: 750;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  display: none;
+  color: var(--slate);
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 40rem) {
+  .tagline {
+    display: inline;
+  }
+}
+
+/* ---------- Hero: the search is the page ---------- */
+
+.hero {
+  padding: 2.75rem 0 1.5rem;
+}
+
+.hero h1 {
+  font-size: clamp(1.9rem, 5vw, 2.6rem);
+  line-height: 1.12;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  max-width: 20ch;
+}
+
+.lead {
+  margin-top: 0.75rem;
+  color: var(--slate);
+  max-width: 52ch;
+}
+
+.search {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-field);
+}
+
+.search:focus-within {
+  border-color: var(--focus);
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.7rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.125rem;
+}
+
+/* The wrapper shows the focus ring, so the field itself does not draw a second one. */
+.search input:focus-visible {
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--slate);
+  opacity: 0.75;
+}
+
+.search button {
+  padding: 0.75rem 1.4rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.search button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.search button:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+@media (min-width: 36rem) {
+  .search {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+.examples {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--slate);
+  font-size: 0.9375rem;
+}
+
+.chip {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* ---------- Results ---------- */
+
+.output {
+  margin-top: 1.5rem;
+}
+
+.understood {
+  padding: 1rem 0 1.25rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.understood-title {
+  color: var(--slate);
+  font-size: 0.9375rem;
+}
+
+.understood dl {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+}
+
+.understood dt {
+  color: var(--slate);
+  font-size: 0.875rem;
+}
+
+.understood dd {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.group {
+  margin-top: 1.5rem;
+}
+
+.group h2 {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.count {
+  margin-left: 0.25rem;
+  color: var(--slate);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.items {
+  list-style: none;
+  padding: 0;
+  margin-top: 0.5rem;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem 1rem;
+  align-items: start;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+@media (min-width: 36rem) {
+  .item {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+.item-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.item-name {
+  display: block;
+  font-weight: 650;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.item-link:hover .item-name,
+.item-link:focus-visible .item-name {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ext {
+  display: inline-block;
+  margin-left: 0.4rem;
+  vertical-align: -1px;
+  color: var(--slate);
+}
+
+.item-summary {
+  display: -webkit-box;
+  margin-top: 0.15rem;
+  color: var(--slate);
+  font-size: 0.9375rem;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  margin-top: 0.5rem;
+  color: var(--slate);
+}
+
+/* The part number as a small label, like the tag on a parts bin. Click to copy. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-self: start;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-tag);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  cursor: copy;
+}
+
+.tag:hover {
+  border-color: var(--accent);
+}
+
+.tag-copied {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tag-state {
+  font-weight: 500;
+}
+
+.tag-state:empty {
+  display: none;
+}
+
+.notice {
+  margin-top: 0.5rem;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+}
+
+/* ---------- Loading ---------- */
+
+.skeleton-row {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.skeleton-bar {
+  display: block;
+  height: 0.9rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--hairline) 25%, var(--hairline-strong) 50%, var(--hairline) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton-title {
+  width: 60%;
+}
+
+.skeleton-text {
+  width: 85%;
+  margin-top: 0.55rem;
+  height: 0.75rem;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}
+
+/* ---------- Footer ---------- */
+
+.foot {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+  color: var(--slate);
+  font-size: 0.875rem;
+}
+
+.foot p {
+  max-width: 60ch;
+}

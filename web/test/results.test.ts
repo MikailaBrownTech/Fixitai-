@@ -32,6 +32,30 @@ describe('third-party text is rendered as text, never as HTML', () => {
   });
 });
 
+describe('part numbers and the understood readout', () => {
+  const part = { title: 'DC66-10170B - Samsung Washer Belt', url: 'https://www.ifixit.com/Item/DC66-10170B', summary: null, imageUrl: null };
+  const out = html({
+    kind: 'results',
+    response: { status: 'ok', entities: { applianceType: 'washer', brand: 'Samsung', modelNumber: null, part: 'belt' }, parts: [part], guides: [] },
+  });
+
+  it('shows the part number as its own copyable tag and keeps it out of the name', () => {
+    expect(out).toContain('aria-label="Copy part number DC66-10170B"');
+    expect(out).toContain('Samsung Washer Belt');
+    expect(out).not.toContain('DC66-10170B - Samsung');
+  });
+
+  it('shows only what the AI found, in plain words', () => {
+    expect(out).toContain('What we understood');
+    for (const text of ['Washer', 'Samsung', 'Belt']) expect(out).toContain(`<dd>${text}</dd>`);
+    expect(out).not.toContain('Model');
+  });
+
+  it('says so when a section is empty instead of hiding it', () => {
+    expect(out).toContain('No repair guides found for this search.');
+  });
+});
+
 describe('links are re-checked at render time', () => {
   it('drops an untrusted link even if one slipped past validation', () => {
     const bad = { ...hostile, title: 'Evil', url: 'javascript:alert(1)' };
