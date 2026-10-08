@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { createHandler } from '../src/handler';
+import { emptyCatalog } from './helpers';
 import { createMockParser } from '../src/llm/mock';
 import type { QueryParser } from '../src/llm/types';
 
@@ -27,7 +28,7 @@ const silent = () => {};
 
 describe('happy path', () => {
   it('returns 200 with entities for a good query', async () => {
-    const handler = createHandler({ parser: createMockParser(), log: silent });
+    const handler = createHandler({ catalog: emptyCatalog, parser: createMockParser(), log: silent });
     const res = await handler(queryEvent('heating element for whirlpool dryer WED4815EW'));
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
@@ -44,7 +45,7 @@ describe('happy path', () => {
   });
 
   it('sets safe response headers', async () => {
-    const handler = createHandler({ parser: createMockParser(), log: silent });
+    const handler = createHandler({ catalog: emptyCatalog, parser: createMockParser(), log: silent });
     const res = await handler(queryEvent('dryer belt'));
     expect(res.headers).toMatchObject({
       'Content-Type': 'application/json',
@@ -71,7 +72,7 @@ describe('bad input is rejected before the LLM is called', () => {
     ['base64-encoded body', event(JSON.stringify({ query: 'dryer belt' }), { isBase64Encoded: true })],
   ])('%s -> 400 and no LLM call', async (_label, ev) => {
     const { parser, parse } = fakeParser(async () => validAi);
-    const handler = createHandler({ parser, log: silent });
+    const handler = createHandler({ catalog: emptyCatalog, parser, log: silent });
     const res = await handler(ev);
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body)).toEqual({ error: 'invalid_request' });
@@ -91,7 +92,7 @@ describe('bad AI output degrades gracefully', () => {
     ['empty text', ''],
   ])('%s -> 200 degraded, no entities', async (_label, aiText) => {
     const { parser } = fakeParser(async () => aiText);
-    const handler = createHandler({ parser, log: silent });
+    const handler = createHandler({ catalog: emptyCatalog, parser, log: silent });
     const res = await handler(queryEvent('dryer belt'));
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
@@ -109,7 +110,7 @@ describe('bad AI output degrades gracefully', () => {
       JSON.stringify({ ...JSON.parse(validAi), brand: `${secret}"` }),
     );
     const logged: Record<string, unknown>[] = [];
-    const handler = createHandler({ parser, log: (line) => logged.push(line) });
+    const handler = createHandler({ catalog: emptyCatalog, parser, log: (line) => logged.push(line) });
     const res = await handler(queryEvent('dryer belt'));
     expect(res.body).not.toContain(secret);
     expect(JSON.stringify(logged)).not.toContain(secret);
@@ -124,7 +125,7 @@ describe('LLM failures degrade gracefully', () => {
       throw new Error('502 Bad Gateway from provider: key sk-LEAKY-123');
     });
     const logged: Record<string, unknown>[] = [];
-    const handler = createHandler({ parser, log: (line) => logged.push(line) });
+    const handler = createHandler({ catalog: emptyCatalog, parser, log: (line) => logged.push(line) });
     const res = await handler(queryEvent('dryer belt'));
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toMatchObject({ status: 'degraded', reason: 'parser_unavailable' });
@@ -138,14 +139,14 @@ describe('LLM failures degrade gracefully', () => {
         throw new TypeError('boom');
       },
     };
-    const handler = createHandler({ parser, log: silent });
+    const handler = createHandler({ catalog: emptyCatalog, parser, log: silent });
     const res = await handler(queryEvent('dryer belt'));
     expect(JSON.parse(res.body)).toMatchObject({ status: 'degraded', reason: 'parser_unavailable' });
   });
 
   it('parser hangs forever -> degrades after the timeout', async () => {
     const { parser } = fakeParser(() => new Promise<string>(() => {}));
-    const handler = createHandler({ parser, parserTimeoutMs: 50, log: silent });
+    const handler = createHandler({ catalog: emptyCatalog, parser, parserTimeoutMs: 50, log: silent });
     const res = await handler(queryEvent('dryer belt'));
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toMatchObject({ status: 'degraded', reason: 'parser_unavailable' });

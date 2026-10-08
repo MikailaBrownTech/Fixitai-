@@ -1,20 +1,17 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { SearchRequestSchema, validateEntitiesFromJson, type ParsedEntities } from '@fixitfast/shared';
+import {
+  SearchRequestSchema,
+  validateEntitiesFromJson,
+  type DegradedReason,
+  type ParsedEntities,
+  type SearchResponse,
+} from '@fixitfast/shared';
 import type { QueryParser } from './llm/types';
-
-export type DegradedReason = 'parser_unavailable' | 'invalid_ai_output';
-
-/**
- * What the frontend receives. `parts` and `guides` stay empty until step 5 adds the
- * upstream API. "degraded" means: we could not understand the query this time, but
- * nothing crashed, and the page can show a friendly fallback.
- */
-export type SearchResponse =
-  | { status: 'ok'; entities: ParsedEntities; parts: never[]; guides: never[] }
-  | { status: 'degraded'; reason: DegradedReason; entities: null; parts: never[]; guides: never[] };
+import type { Catalog } from './upstream/ifixit';
 
 export interface HandlerDeps {
   parser: QueryParser;
+  catalog: Catalog;
   /** How long we wait for the LLM before giving up. */
   parserTimeoutMs?: number;
   /** Where structured log lines go. Defaults to console. Never receives user text. */
@@ -38,8 +35,8 @@ function respond(statusCode: number, body: unknown): APIGatewayProxyResult {
 // Same message for every kind of bad input, so the API reveals nothing about which rule failed.
 const badRequest = () => respond(400, { error: 'invalid_request' });
 
-function degraded(reason: DegradedReason): APIGatewayProxyResult {
-  const body: SearchResponse = { status: 'degraded', reason, entities: null, parts: [], guides: [] };
+function degraded(reason: DegradedReason, entities: ParsedEntities | null = null): APIGatewayProxyResult {
+  const body: SearchResponse = { status: 'degraded', reason, entities, parts: [], guides: [] };
   return respond(200, body);
 }
 
@@ -94,8 +91,27 @@ export function createHandler(deps: HandlerDeps) {
       log({ event: 'ai_output_rejected', issues: validated.issues });
       return degraded('invalid_ai_output');
     }
+    const entities = validated.data;
 
-    const body: SearchResponse = { status: 'ok', entities: validated.data, parts: [], guides: [] };
-    return respond(200, body);
+    // 5. Search iFixit with the validated entities. If that fails we still know what the
+    //    visitor meant, so the degraded response carries the entities for the page to show.
+    try {
+      const found = await deps.catalog.search(entities);
+      if (!found.ok) {
+        log({ event: 'upstream_failed', reason: found.reason });
+        return degraded('upstream_unavailable', entities);
+      }
+      const body: SearchResponse = {
+        status: 'ok',
+        entities,
+        parts: found.data.parts,
+        guides: found.data.guides,
+      };
+      return respond(200, body);
+    } catch (err) {
+      // The catalog is built never to throw, so reaching this means a bug. Still, never crash.
+      log({ event: 'upstream_failed', reason: 'unexpected', kind: err instanceof Error ? err.name : 'unknown' });
+      return degraded('upstream_unavailable', entities);
+    }
   };
 }
