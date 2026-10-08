@@ -44,7 +44,7 @@ const SuggestItemSchema = z.object({
   image: z.object({ thumbnail: z.unknown().optional() }).nullish(),
 });
 
-function toResultItem(raw: unknown): { kind: 'guide' | 'item'; item: ResultItem } | null {
+export function toResultItem(raw: unknown): { kind: 'guide' | 'item'; item: ResultItem } | null {
   const parsed = SuggestItemSchema.safeParse(raw);
   if (!parsed.success) return null;
   const { dataType, title, summary, url, image } = parsed.data;

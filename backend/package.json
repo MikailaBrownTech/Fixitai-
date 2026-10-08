@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsx scripts/build.ts",
-    "smoke:live": "tsx scripts/live-smoke.ts"
+    "smoke:live": "tsx scripts/live-smoke.ts",
+    "probe:ifixit": "tsx scripts/ifixit-probe.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
