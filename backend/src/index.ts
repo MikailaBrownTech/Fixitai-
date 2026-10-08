@@ -1,5 +1,5 @@
 import { createHandler } from './handler';
-import { createMockParser } from './llm/mock';
+import { buildParser } from './llm/config';
 
-// Step 3: always the mock. Step 4 will choose a provider from LLM_PROVIDER.
-export const handler = createHandler({ parser: createMockParser() });
+// LLM_PROVIDER picks the parser: mock (default, free) or anthropic. Bedrock comes later.
+export const handler = createHandler({ parser: buildParser(process.env) });

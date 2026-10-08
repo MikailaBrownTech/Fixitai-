@@ -4,12 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "smoke:live": "tsx scripts/live-smoke.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
     "@fixitfast/shared": "*"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.164"
+    "@types/aws-lambda": "^8.10.164",
+    "tsx": "^4.23.15"
   }
 }
