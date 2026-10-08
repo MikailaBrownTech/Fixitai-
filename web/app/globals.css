@@ -17,6 +17,18 @@
   --on-accent: #ffffff;
   --focus: #0f5bdb;
 
+  /* Colour with a job: blue = search, amber = parts, teal = repair guides. */
+  --wash: #dce9ff;
+  --wash-2: #fdeccf;
+  --part: #8a4b08;
+  --part-bg: #fff1d9;
+  --part-edge: #f0c27a;
+  --guide: #0b6b63;
+  --guide-bg: #dff4f0;
+  --guide-edge: #86d3c8;
+  --panel: #eef4ff;
+  --panel-edge: #bcd3fb;
+
   --radius-field: 14px;
   --radius-control: 10px;
   --radius-tag: 6px;
@@ -36,6 +48,17 @@
     --accent-hover: #93b9ff;
     --on-accent: #0b1219;
     --focus: #8db3ff;
+
+    --wash: #14284a;
+    --wash-2: #2b2112;
+    --part: #f2b55c;
+    --part-bg: #2a2113;
+    --part-edge: #5b4420;
+    --guide: #5fd3c4;
+    --guide-bg: #112a27;
+    --guide-edge: #1f5a53;
+    --panel: #14223a;
+    --panel-edge: #26406b;
   }
 }
 
@@ -49,7 +72,12 @@ html {
 
 body {
   margin: 0;
-  background: var(--page);
+  /* Top layer fades the colour band into the page so it has no hard bottom edge. */
+  background:
+    linear-gradient(180deg, transparent 0%, var(--page) 100%) no-repeat,
+    linear-gradient(115deg, var(--wash) 0%, var(--page) 42%, var(--wash-2) 100%) no-repeat,
+    var(--page);
+  background-size: 100% 30rem, 100% 30rem, auto;
   color: var(--ink);
   font-family: var(--font);
   font-size: 1.0625rem;
@@ -112,6 +140,7 @@ main {
 }
 
 .wordmark {
+  color: var(--accent);
   font-weight: 750;
   font-size: 1.25rem;
   letter-spacing: -0.02em;
@@ -156,8 +185,9 @@ main {
   gap: 0.5rem;
   padding: 0.5rem;
   background: var(--surface);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--panel-edge);
   border-radius: var(--radius-field);
+  box-shadow: 0 6px 24px -10px var(--accent);
 }
 
 .search:focus-within {
@@ -226,9 +256,9 @@ main {
 
 .chip {
   padding: 0.3rem 0.8rem;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--panel-edge);
   border-radius: 999px;
-  background: transparent;
+  background: var(--panel);
   color: var(--ink);
   font: inherit;
   font-size: 0.9375rem;
@@ -253,12 +283,15 @@ main {
 }
 
 .understood {
-  padding: 1rem 0 1.25rem;
-  border-top: 1px solid var(--hairline);
+  padding: 0.9rem 1rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
 }
 
 .understood-title {
-  color: var(--slate);
+  color: var(--accent);
+  font-weight: 650;
   font-size: 0.9375rem;
 }
 
@@ -283,16 +316,51 @@ main {
   margin-top: 1.5rem;
 }
 
+.group {
+  --tone: var(--accent);
+  --tone-bg: var(--panel);
+  --tone-edge: var(--panel-edge);
+}
+
+.group-part {
+  --tone: var(--part);
+  --tone-bg: var(--part-bg);
+  --tone-edge: var(--part-edge);
+}
+
+.group-guide {
+  --tone: var(--guide);
+  --tone-bg: var(--guide-bg);
+  --tone-edge: var(--guide-edge);
+}
+
 .group h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--tone-edge);
   font-size: 1.1875rem;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
+.group h2::before {
+  content: '';
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 3px;
+  background: var(--tone);
+}
+
 .count {
-  margin-left: 0.25rem;
-  color: var(--slate);
-  font-weight: 500;
+  padding: 0.05rem 0.6rem;
+  border-radius: 999px;
+  background: var(--tone-bg);
+  border: 1px solid var(--tone-edge);
+  color: var(--tone);
+  font-size: 0.875rem;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
@@ -337,7 +405,7 @@ main {
 
 .item-link:hover .item-name,
 .item-link:focus-visible .item-name {
-  color: var(--accent);
+  color: var(--tone);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -372,10 +440,10 @@ main {
   gap: 0.5rem;
   justify-self: start;
   padding: 0.2rem 0.55rem;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--tone-edge);
   border-radius: var(--radius-tag);
-  background: var(--surface);
-  color: var(--ink);
+  background: var(--tone-bg);
+  color: var(--tone);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 650;
@@ -385,12 +453,11 @@ main {
 }
 
 .tag:hover {
-  border-color: var(--accent);
+  border-color: var(--tone);
 }
 
 .tag-copied {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--tone);
 }
 
 .tag-state {

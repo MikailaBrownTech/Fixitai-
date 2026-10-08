@@ -56,9 +56,9 @@ function Understood({ entities }: { entities: ParsedEntities }) {
   );
 }
 
-function ItemList({ heading, items, emptyText, showPartNumbers }: { heading: string; items: ResultItem[]; emptyText: string; showPartNumbers: boolean }) {
+function ItemList({ heading, tone, items, emptyText, showPartNumbers }: { heading: string; tone: 'part' | 'guide'; items: ResultItem[]; emptyText: string; showPartNumbers: boolean }) {
   return (
-    <section className="group">
+    <section className={`group group-${tone}`}>
       <h2>
         {heading} <span className="count">{items.length}</span>
       </h2>
@@ -137,8 +137,8 @@ export function Results({ outcome }: { outcome: SearchOutcome }) {
       return (
         <div role="status">
           <Understood entities={outcome.response.entities} />
-          <ItemList heading="Parts" items={parts} emptyText="No parts found for this search." showPartNumbers />
-          <ItemList heading="Repair guides" items={guides} emptyText="No repair guides found for this search." showPartNumbers={false} />
+          <ItemList heading="Parts" tone="part" items={parts} emptyText="No parts found for this search." showPartNumbers />
+          <ItemList heading="Repair guides" tone="guide" items={guides} emptyText="No repair guides found for this search." showPartNumbers={false} />
         </div>
       );
     }
