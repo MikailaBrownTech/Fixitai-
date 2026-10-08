@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/*",
     "backend",
-    "infra"
+    "infra",
+    "web"
   ],
   "scripts": {
     "test": "vitest run",

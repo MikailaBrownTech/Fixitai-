@@ -1,0 +1,16 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #0b5cd5; --border: #ccc; }
+@media (prefers-color-scheme: dark) { :root { --bg: #14161a; --fg: #eee; --muted: #aaa; --accent: #7fb0ff; --border: #444; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+main { max-width: 42rem; margin: 0 auto; padding: 1rem; }
+.lead, footer { color: var(--muted); }
+form { display: grid; gap: .5rem; margin: 1.5rem 0; }
+input { padding: .6rem; font: inherit; border: 1px solid var(--border); border-radius: .4rem; background: var(--bg); color: var(--fg); }
+button { padding: .6rem 1rem; font: inherit; border: 0; border-radius: .4rem; background: var(--accent); color: var(--bg); cursor: pointer; }
+button:disabled { opacity: .6; cursor: progress; }
+a { color: var(--accent); }
+.items { list-style: none; padding: 0; }
+.items li { padding: .75rem 0; border-bottom: 1px solid var(--border); }
+.items p { margin: .25rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.notice { padding: .75rem; border: 1px solid var(--border); border-radius: .4rem; }
+footer { margin-top: 3rem; font-size: .875rem; }
