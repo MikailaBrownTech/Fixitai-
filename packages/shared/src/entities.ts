@@ -29,6 +29,17 @@ export const APPLIANCE_TYPES = [
  */
 const wordCount = (s: string) => s.split(' ').filter(Boolean).length;
 
+/**
+ * Scope rule: a search must be anchored to an appliance type, a brand or a model number. A part
+ * name alone ("drive belt", "dog leash") is rejected, because it could be about anything. A model
+ * number only counts as an anchor if it contains a digit (real ones always do: WED4815EW,
+ * DC66-10170B), so a model-number field filled with plain words does not slip through.
+ * KNOWN LIMIT: a brand alone is a weak anchor (for example "Apple laptop battery" passes).
+ */
+function hasAnchor(e: { applianceType: string | null; brand: string | null; modelNumber: string | null }): boolean {
+  return e.applianceType !== null || e.brand !== null || (e.modelNumber !== null && /\d/.test(e.modelNumber));
+}
+
 export const ParsedEntitiesSchema = z
   .strictObject({
     applianceType: z.enum(APPLIANCE_TYPES).nullable(),
@@ -53,8 +64,6 @@ export const ParsedEntitiesSchema = z
       .refine((s) => wordCount(s) <= 5, { message: 'too many words' })
       .nullable(),
   })
-  .refine((e) => Object.values(e).some((v) => v !== null), {
-    message: 'no entities extracted',
-  });
+  .refine(hasAnchor, { message: 'no appliance, brand or model number found' });
 
 export type ParsedEntities = z.infer<typeof ParsedEntitiesSchema>;

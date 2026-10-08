@@ -47,6 +47,7 @@ describe('every outcome has a message', () => {
     ['rejected', { kind: 'rejected' }, 'not accepted'],
     ['unavailable', { kind: 'unavailable' }, 'unavailable right now'],
     ['degraded', { kind: 'degraded', response: { status: 'degraded', reason: 'upstream_unavailable', entities, parts: [], guides: [] } }, 'repair-guide source'],
+    ['degraded: not an appliance search', { kind: 'degraded', response: { status: 'degraded', reason: 'invalid_ai_output', entities: null, parts: [], guides: [] } }, 'match that to an appliance'],
     ['empty results', { kind: 'results', response: { status: 'ok', entities, parts: [], guides: [] } }, 'No matches'],
   ])('%s', (_label, outcome, text) => {
     expect(html(outcome)).toContain(text);

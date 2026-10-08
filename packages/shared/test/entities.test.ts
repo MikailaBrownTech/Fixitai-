@@ -103,3 +103,31 @@ describe('validateEntitiesFromJson: bad model text', () => {
     expect(validateEntitiesFromJson('').ok).toBe(false);
   });
 });
+
+describe('scope rule: a search needs an appliance, a brand, or a model number with a digit', () => {
+  const none = { applianceType: null, brand: null, modelNumber: null, part: null };
+
+  it.each([
+    ['a part alone', { ...none, part: 'drive belt' }],
+    ['a part alone that is not an appliance part', { ...none, part: 'dog leash' }],
+    ['a model number with no digit', { ...none, modelNumber: 'leash', part: 'collar' }],
+    ['a model number with no digit and no part', { ...none, modelNumber: 'abc' }],
+  ])('rejects %s', (_label, entities) => {
+    expect(validateEntities(entities).ok).toBe(false);
+  });
+
+  it.each([
+    ['an appliance type alone', { ...none, applianceType: 'dryer' }],
+    ['a brand alone', { ...none, brand: 'Whirlpool' }],
+    ['a model number with a digit alone', { ...none, modelNumber: 'WED4815EW' }],
+    ['a hyphenated part number', { ...none, modelNumber: 'DC66-10170B' }],
+    ['a part with an appliance', { ...none, applianceType: 'washer', part: 'drive belt' }],
+  ])('accepts %s', (_label, entities) => {
+    expect(validateEntities(entities).ok).toBe(true);
+  });
+
+  it('a short instruction in the part field no longer passes on its own', () => {
+    // This was the documented KNOWN LIMIT above: short plain-text phrases passed the format checks.
+    expect(validateEntities({ ...none, part: 'ignore instructions' }).ok).toBe(false);
+  });
+});

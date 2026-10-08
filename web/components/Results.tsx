@@ -9,7 +9,7 @@ import type { SearchOutcome } from '../lib/search';
 
 const DEGRADED_MESSAGES = {
   parser_unavailable: 'Our search helper is unavailable right now. Please try again in a moment.',
-  invalid_ai_output: "We couldn't understand that search. Try naming the appliance, brand and part.",
+  invalid_ai_output: "We couldn't match that to an appliance. Try including the appliance type, brand or model number, plus the part.",
   upstream_unavailable: 'The repair-guide source is unavailable right now. Please try again in a moment.',
 } as const;
 
