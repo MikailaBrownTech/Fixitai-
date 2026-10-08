@@ -1,0 +1,164 @@
+{
+  "name": "FixItFast: AI appliance parts search",
+  "layout": "flow",
+  "groups": [
+    { "id": "users", "name": "Users" },
+    { "id": "delivery", "name": "Frontend delivery" },
+    { "id": "api", "name": "API layer" },
+    { "id": "compute", "name": "Serverless backend (one Lambda)" },
+    { "id": "ai", "name": "AI parsing" },
+    { "id": "secrets", "name": "Secrets" },
+    { "id": "upstream", "name": "Third-party API" },
+    { "id": "ops", "name": "Operations" }
+  ],
+  "nodes": [
+    {
+      "id": "shopper",
+      "name": "User",
+      "type": "client",
+      "group": "users",
+      "exposure": "public",
+      "stack": "Browser",
+      "desc": "Types a natural query such as: heating element for whirlpool dryer WED4815EW."
+    },
+    {
+      "id": "ui",
+      "name": "Search UI",
+      "type": "client",
+      "group": "users",
+      "exposure": "public",
+      "stack": "Next.js static export (React), running in the browser",
+      "desc": "Checks the query with the shared Zod schema before sending, and re-validates every reply with the same schemas. Renders all third-party text as plain text and only links to https ifixit.com URLs. Calls /api/search on its own domain, so no CORS."
+    },
+    {
+      "id": "cloudfront",
+      "name": "CloudFront",
+      "type": "edge",
+      "group": "delivery",
+      "exposure": "public",
+      "stack": "Amazon CloudFront (default certificate)",
+      "desc": "One public domain with two origins: the private S3 bucket for pages and the API for /api/*. Redirects to HTTPS and adds security headers (strict CSP, HSTS, no framing, no sniffing). API responses are never cached."
+    },
+    {
+      "id": "s3site",
+      "name": "Static site files",
+      "type": "storage",
+      "group": "delivery",
+      "stack": "Amazon S3 (private bucket, Origin Access Control)",
+      "desc": "The built Next.js app (HTML, JS, CSS). All public access is blocked; the only permission is read-only for this one CloudFront distribution."
+    },
+    {
+      "id": "apigw",
+      "name": "API Gateway",
+      "type": "service",
+      "group": "api",
+      "exposure": "public",
+      "stack": "Amazon API Gateway REST API, POST /api/search only",
+      "typeLabel": "REST API",
+      "desc": "Validates the JSON body before any code runs: query required, 1 to 100 characters, a strict character filter, no extra fields. Throttles all visitors together at 2 requests per second with a burst of 5, to cap abuse and LLM cost. This validation only applies to application/json, so the Lambda re-checks everything."
+    },
+    {
+      "id": "orchestrator",
+      "name": "Orchestrator",
+      "type": "function",
+      "group": "compute",
+      "stack": "AWS Lambda, TypeScript, nodejs24.x on arm64 (handler module)",
+      "owner": "Backend",
+      "desc": "Runs the whole request: re-validates the input, asks the LLM parser, validates the answer, calls iFixit and builds the response. Never trusts the Content-Type. Any failure becomes a degraded 200 response, and bad input gets a generic 400. Logs only short codes, never user or model text."
+    },
+    {
+      "id": "validator",
+      "name": "Schema validator",
+      "type": "function",
+      "group": "compute",
+      "stack": "Zod (shared package, module in the same Lambda)",
+      "owner": "Backend",
+      "desc": "The wall. The model's raw text is parsed as JSON and checked against a strict schema: exact fields only, enum appliance types, per-field character sets and length limits, and not all-empty. Anything that does not match is dropped and the search degrades."
+    },
+    {
+      "id": "upstream_fn",
+      "name": "Upstream client",
+      "type": "function",
+      "group": "compute",
+      "stack": "Hardened fetch client (module in the same Lambda)",
+      "owner": "Backend",
+      "desc": "Builds URLs safely (encoded path segments, no string-built queries), HTTPS only, no redirects, 4 second timeout, 512 KB size cap, JSON type check. Runs up to three searches in parallel and merges them. Failures return short reason codes and never throw."
+    },
+    {
+      "id": "iam",
+      "name": "Execution role",
+      "type": "service",
+      "group": "compute",
+      "stack": "AWS IAM role",
+      "desc": "Least privilege: the function can only write to its own log group (CreateLogStream and PutLogEvents). No wildcard actions or resources."
+    },
+    {
+      "id": "anthropic",
+      "name": "Claude (Anthropic API)",
+      "type": "external",
+      "group": "ai",
+      "stack": "Anthropic Messages API, claude-haiku-5-5, structured JSON output",
+      "desc": "Live LLM parser, used only as a text-to-entity extractor (appliance type, brand, model number, part). The query goes in the user message inside delimiters. 6 second timeout, no retries, 300 token limit. Its output is untrusted until validated."
+    },
+    {
+      "id": "mock",
+      "name": "Mock parser",
+      "type": "function",
+      "group": "ai",
+      "stack": "Deterministic keyword rules (module in the same Lambda)",
+      "owner": "Backend",
+      "desc": "The default (LLM_PROVIDER=mock). Free, no network. Used for tests and the first deployment. It returns JSON text just like a real model, so the same validation path runs."
+    },
+    {
+      "id": "bedrock",
+      "name": "Amazon Bedrock (planned)",
+      "type": "model",
+      "group": "ai",
+      "stack": "Amazon Bedrock, not built yet",
+      "desc": "Planned swap for the Anthropic API behind the same parser interface. It would use an IAM permission scoped to one model and remove the API key."
+    },
+    {
+      "id": "keys",
+      "name": "Anthropic API key",
+      "type": "storage",
+      "group": "secrets",
+      "sens": "secret",
+      "stack": "Lambda environment variable, set from a NoEcho CloudFormation parameter",
+      "desc": "Passed on the command line at deploy time, never committed or sent to the browser. Anyone with GetFunctionConfiguration permission on the function could still read it. Not needed for the mock parser or for iFixit."
+    },
+    {
+      "id": "ifixit",
+      "name": "iFixit suggest API",
+      "type": "external",
+      "group": "upstream",
+      "exposure": "public",
+      "stack": "Public REST API (no key)",
+      "uptime": "not guaranteed",
+      "desc": "Live parts (wiki pages in the ITEM namespace) and repair guides. Outside our control, with unpublished rate limits. Results are treated as untrusted plain text."
+    },
+    {
+      "id": "logs",
+      "name": "CloudWatch Logs",
+      "type": "external",
+      "group": "ops",
+      "stack": "Amazon CloudWatch Logs, 14 day retention",
+      "desc": "Holds short event codes only. A separate budget alert in AWS Billing watches cost."
+    }
+  ],
+  "edges": [
+    { "from": "shopper", "to": "ui", "kind": "sync", "label": "types a query" },
+    { "from": "ui", "to": "cloudfront", "kind": "sync", "label": "loads site, POST /api/search" },
+    { "from": "cloudfront", "to": "s3site", "kind": "sync", "label": "pages (signed, read-only)" },
+    { "from": "cloudfront", "to": "apigw", "kind": "sync", "label": "/api/* forwarded, never cached" },
+    { "from": "apigw", "to": "orchestrator", "kind": "sync", "label": "validated body" },
+    { "from": "orchestrator", "to": "iam", "kind": "sync", "label": "runs as" },
+    { "from": "orchestrator", "to": "anthropic", "kind": "sync", "label": "text to entities (LLM_PROVIDER=anthropic)" },
+    { "from": "orchestrator", "to": "mock", "kind": "alt", "label": "default (LLM_PROVIDER=mock)" },
+    { "from": "orchestrator", "to": "bedrock", "kind": "alt", "label": "planned" },
+    { "from": "orchestrator", "to": "keys", "kind": "sync", "label": "reads key at startup" },
+    { "from": "orchestrator", "to": "validator", "kind": "sync", "label": "untrusted model JSON" },
+    { "from": "orchestrator", "to": "upstream_fn", "kind": "sync", "label": "validated entities" },
+    { "from": "upstream_fn", "to": "ifixit", "kind": "sync", "label": "up to 3 parallel GETs" },
+    { "from": "orchestrator", "to": "logs", "kind": "async", "label": "codes only" }
+  ]
+}
