@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: FixItFast backend - API Gateway REST API in front of one Lambda function.
+
+# Nothing here is deployed until step 9. Before deploying: run `npm run build -w @fixitfast/backend`
+# (it creates backend/dist, which CodeUri points at) and set up a budget alarm.
+
+Parameters:
+  LlmProvider:
+    Type: String
+    Default: mock
+    AllowedValues: [mock, anthropic]
+    Description: mock is free. anthropic makes paid API calls.
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Only needed when LlmProvider=anthropic. Pass it at deploy time, never commit it.
+  AnthropicModel:
+    Type: String
+    Default: ''
+    Description: Optional model override. Empty uses the code default.
+  ThrottleRate:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 20
+    Description: Steady requests per second allowed across ALL visitors combined.
+  ThrottleBurst:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 40
+    Description: Short-spike allowance above the steady rate.
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30]
+    Description: Short retention keeps log storage cost near zero.
+
+Resources:
+  # We create the log group ourselves so (a) retention is set and (b) the function does not
+  # need permission to create log groups.
+  SearchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${AWS::StackName}-search
+      RetentionInDays:
+        Ref: LogRetentionDays
+
+  # Least privilege: the ONLY thing this function may do is write to its own log group.
+  # There is no wildcard action and no wildcard resource. A Bedrock permission scoped to a single
+  # model will be added when we switch providers.
+  SearchFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-own-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-search:*
+
+  SearchFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: SearchLogGroup
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-search
+      Description: Parses a search with an LLM, validates the result, queries iFixit.
+      # Built by `npm run build -w @fixitfast/backend` (esbuild bundles everything into one file).
+      CodeUri: ../backend/dist/
+      Handler: index.handler
+      Runtime: nodejs24.x
+      Architectures: [arm64]
+      MemorySize: 256
+      # Must stay above the code's own budget: LLM 8 s + iFixit 4 s, plus headroom.
+      Timeout: 15
+      Role:
+        Fn::GetAtt: [SearchFunctionRole, Arn]
+      Environment:
+        Variables:
+          LLM_PROVIDER:
+            Ref: LlmProvider
+          ANTHROPIC_API_KEY:
+            Ref: AnthropicApiKey
+          ANTHROPIC_MODEL:
+            Ref: AnthropicModel
+      Events:
+        Search:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: SearchApi
+            Path: /search
+            Method: POST
+
+  # A REST API (not an HTTP API) because only REST APIs can validate request bodies at the gateway.
+  SearchApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      # One shared bucket for every visitor. This bounds our worst-case cost. It is NOT per-visitor
+      # limiting (that needs API keys or WAF, neither fits a public static page).
+      MethodSettings:
+        - ResourcePath: /*
+          HttpMethod: '*'
+          ThrottlingRateLimit:
+            Ref: ThrottleRate
+          ThrottlingBurstLimit:
+            Ref: ThrottleBurst
+      DefinitionBody:
+        openapi: 3.0.1
+        info:
+          title: fixitfast
+          version: '1.0'
+        x-amazon-apigateway-request-validators:
+          body-only:
+            validateRequestBody: true
+            validateRequestParameters: false
+        paths:
+          /search:
+            post:
+              x-amazon-apigateway-request-validator: body-only
+              # Declared explicitly. When I expanded this template offline, SAM did NOT add the
+              # integration by itself, which would have deployed an API that calls nothing.
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SearchFunction.Arn}/invocations
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/SearchRequest'
+              responses:
+                '200':
+                  description: Search result, or a degraded result
+                '400':
+                  description: Invalid request
+        components:
+          schemas:
+            # Must match QUERY_MAX_LENGTH and QUERY_PATTERN in packages/shared (a test enforces this).
+            # The gateway only validates bodies sent as application/json, and we have NOT yet confirmed
+            # how it applies "pattern". The Lambda re-checks everything regardless.
+            SearchRequest:
+              type: object
+              required: [query]
+              additionalProperties: false
+              properties:
+                query:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: ^[A-Za-z0-9 .,'/&-]+$
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the API (POST /search)
+    Value:
+      Fn::Sub: https://${SearchApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+  FunctionName:
+    Value:
+      Ref: SearchFunction

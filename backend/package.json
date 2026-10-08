@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsx scripts/build.ts",
     "smoke:live": "tsx scripts/live-smoke.ts"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.164",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15"
   }
 }

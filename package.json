@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "backend"
+    "backend",
+    "infra"
   ],
   "scripts": {
     "test": "vitest run",
