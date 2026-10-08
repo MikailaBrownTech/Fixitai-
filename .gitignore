@@ -1,0 +1,21 @@
+# Secrets: never commit these (security requirement 3)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+.aws-sam/
+samconfig.toml
+.next/
+out/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.log
