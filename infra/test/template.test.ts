@@ -19,10 +19,10 @@ const template = parse(text) as Tree;
 const resources = template.Resources as Tree;
 
 describe('security tier 1: input constraints at the gateway', () => {
-  const op = resources.SearchApi.Properties.DefinitionBody.paths['/search'].post;
+  const op = resources.SearchApi.Properties.DefinitionBody.paths['/api/search'].post;
   const schema = resources.SearchApi.Properties.DefinitionBody.components.schemas.SearchRequest;
 
-  it('uses a REST API with the body validator switched on for POST /search', () => {
+  it('uses a REST API with the body validator switched on for POST /api/search', () => {
     const validators = resources.SearchApi.Properties.DefinitionBody['x-amazon-apigateway-request-validators'];
     expect(validators['body-only'].validateRequestBody).toBe(true);
     expect(op['x-amazon-apigateway-request-validator']).toBe('body-only');
@@ -43,18 +43,18 @@ describe('security tier 1: input constraints at the gateway', () => {
     expect(schema.additionalProperties).toBe(false);
   });
 
-  it('wires POST /search to the Lambda function (a proxy integration declared in the template)', () => {
+  it('wires POST /api/search to the Lambda function (a proxy integration declared in the template)', () => {
     const integration = op['x-amazon-apigateway-integration'];
     expect(integration.type).toBe('aws_proxy');
     expect(integration.httpMethod).toBe('POST');
     expect(integration.uri['Fn::Sub']).toContain('lambda:path/2015-03-31/functions/${SearchFunction.Arn}/invocations');
   });
 
-  it('exposes only POST /search', () => {
+  it('exposes only POST /api/search', () => {
     const paths = resources.SearchApi.Properties.DefinitionBody.paths;
-    expect(Object.keys(paths)).toEqual(['/search']);
-    expect(Object.keys(paths['/search'])).toEqual(['post']);
-    expect(resources.SearchFunction.Properties.Events.Search.Properties).toMatchObject({ Path: '/search', Method: 'POST' });
+    expect(Object.keys(paths)).toEqual(['/api/search']);
+    expect(Object.keys(paths['/api/search'])).toEqual(['post']);
+    expect(resources.SearchFunction.Properties.Events.Search.Properties).toMatchObject({ Path: '/api/search', Method: 'POST' });
   });
 });
 
@@ -161,5 +161,134 @@ describe('function settings', () => {
 
   it('is a regional API (no hidden extra CloudFront distribution)', () => {
     expect(resources.SearchApi.Properties.EndpointConfiguration.Type).toBe('REGIONAL');
+  });
+});
+
+describe('website: private bucket behind CloudFront', () => {
+  const bucket = resources.SiteBucket.Properties;
+  const policy = resources.SiteBucketPolicy.Properties.PolicyDocument;
+  const dist = resources.SiteDistribution.Properties.DistributionConfig;
+  const headers = resources.SiteSecurityHeaders.Properties.ResponseHeadersPolicyConfig.SecurityHeadersConfig;
+
+  it('the bucket blocks all public access and is not a public website', () => {
+    expect(bucket.PublicAccessBlockConfiguration).toEqual({
+      BlockPublicAcls: true,
+      BlockPublicPolicy: true,
+      IgnorePublicAcls: true,
+      RestrictPublicBuckets: true,
+    });
+    expect(bucket.WebsiteConfiguration).toBeUndefined();
+    expect(bucket.AccessControl).toBeUndefined();
+    expect(bucket.OwnershipControls.Rules).toEqual([{ ObjectOwnership: 'BucketOwnerEnforced' }]);
+  });
+
+  it('the only bucket permission is: CloudFront may read objects, from this one distribution', () => {
+    expect(policy.Statement).toHaveLength(1);
+    const [stmt] = policy.Statement;
+    expect(stmt.Effect).toBe('Allow');
+    expect(stmt.Principal).toEqual({ Service: 'cloudfront.amazonaws.com' });
+    expect(stmt.Action).toBe('s3:GetObject'); // no list, no write, no delete
+    expect(stmt.Resource).toEqual({ 'Fn::Sub': '${SiteBucket.Arn}/*' });
+    expect(stmt.Condition.StringEquals['AWS:SourceArn']['Fn::Sub']).toContain('distribution/${SiteDistribution}');
+  });
+
+  it('CloudFront reaches S3 through a signed Origin Access Control', () => {
+    const oac = resources.SiteOriginAccessControl.Properties.OriginAccessControlConfig;
+    expect(oac).toMatchObject({ OriginAccessControlOriginType: 's3', SigningBehavior: 'always', SigningProtocol: 'sigv4' });
+    const site = dist.Origins.find((o: Tree) => o.Id === 'site');
+    expect(site.OriginAccessControlId).toEqual({ 'Fn::GetAtt': ['SiteOriginAccessControl', 'Id'] });
+    expect(site.S3OriginConfig.OriginAccessIdentity).toBe('');
+  });
+
+  it('pages: HTTPS only, read-only methods', () => {
+    const b = dist.DefaultCacheBehavior;
+    expect(b.ViewerProtocolPolicy).toBe('redirect-to-https');
+    expect(b.AllowedMethods).toEqual(['GET', 'HEAD']);
+    expect(b.TargetOriginId).toBe('site');
+  });
+
+  it('/api/* goes to the API over HTTPS, with caching off', () => {
+    const [b] = dist.CacheBehaviors;
+    expect(dist.CacheBehaviors).toHaveLength(1);
+    expect(b.PathPattern).toBe('/api/*');
+    expect(b.TargetOriginId).toBe('api');
+    expect(b.ViewerProtocolPolicy).toBe('https-only');
+    expect(b.CachePolicyId).toBe('4135ea2d-6df8-44a3-9df3-4b5a84be39ad'); // managed CachingDisabled
+    expect(b.OriginRequestPolicyId).toBe('b689b0a8-53d0-40ab-baf2-68738e2966ac'); // AllViewerExceptHostHeader
+  });
+
+  it('the API origin is this stack\'s API, stage "prod", HTTPS and TLS 1.2 only', () => {
+    const api = dist.Origins.find((o: Tree) => o.Id === 'api');
+    expect(api.DomainName['Fn::Sub']).toMatch(/^\$\{SearchApi\}\.execute-api\./);
+    expect(api.OriginPath).toBe(`/${resources.SearchApi.Properties.StageName}`);
+    expect(api.CustomOriginConfig.OriginProtocolPolicy).toBe('https-only');
+    expect(api.CustomOriginConfig.OriginSSLProtocols).toEqual(['TLSv1.2']);
+  });
+
+  it('the frontend\'s path (/api/search) matches what CloudFront forwards to the API route', () => {
+    const route = Object.keys(resources.SearchApi.Properties.DefinitionBody.paths)[0] as string;
+    expect(route.startsWith('/api/')).toBe(true);
+  });
+
+  it('security headers apply to both the pages and the API', () => {
+    const ref = { Ref: 'SiteSecurityHeaders' };
+    expect(dist.DefaultCacheBehavior.ResponseHeadersPolicyId).toEqual(ref);
+    expect(dist.CacheBehaviors[0].ResponseHeadersPolicyId).toEqual(ref);
+  });
+
+  it('sets HSTS for a year, no framing, no sniffing, no referrer', () => {
+    expect(headers.StrictTransportSecurity.AccessControlMaxAgeSec).toBeGreaterThanOrEqual(31536000);
+    expect(headers.FrameOptions.FrameOption).toBe('DENY');
+    expect(headers.ContentTypeOptions.Override).toBe(true);
+    expect(headers.ReferrerPolicy.ReferrerPolicy).toBe('no-referrer');
+  });
+
+  describe('Content Security Policy', () => {
+    const csp: string = headers.ContentSecurityPolicy.ContentSecurityPolicy;
+    const directives = Object.fromEntries(
+      csp.split(';').map((d) => d.trim()).filter(Boolean).map((d) => {
+        const [name, ...values] = d.split(/\s+/);
+        return [name, values];
+      }),
+    ) as Record<string, string[]>;
+
+    it('locks everything to our own domain by default', () => {
+      expect(directives['default-src']).toEqual(["'self'"]);
+      expect(directives['connect-src']).toEqual(["'self'"]);
+      expect(directives['object-src']).toEqual(["'none'"]);
+      expect(directives['frame-ancestors']).toEqual(["'none'"]);
+      expect(directives['base-uri']).toEqual(["'self'"]);
+      expect(directives['form-action']).toEqual(["'self'"]);
+    });
+
+    it('allows inline scripts only (Next.js needs them), never eval, never other sites', () => {
+      expect(directives['script-src']).toEqual(["'self'", "'unsafe-inline'"]);
+      expect(csp).not.toContain('unsafe-eval');
+    });
+
+    it('keeps styles strict', () => {
+      expect(directives['style-src']).toEqual(["'self'"]);
+    });
+
+    it('has no wildcard or http: sources anywhere', () => {
+      expect(csp).not.toMatch(/(^|\s)\*(\s|;|$)/);
+      expect(csp).not.toMatch(/\bhttp:/);
+    });
+  });
+
+  it('only missing-file errors are replaced with the 404 page, so API errors (400, 429...) pass through', () => {
+    const codes = dist.CustomErrorResponses.map((e: Tree) => e.ErrorCode).sort();
+    expect(codes).toEqual([403, 404]);
+    for (const e of dist.CustomErrorResponses) expect(e.ResponseCode).toBe(404);
+  });
+
+  it('uses the cheapest edge set and the free default certificate', () => {
+    expect(dist.PriceClass).toBe('PriceClass_100');
+    expect(dist.ViewerCertificate).toEqual({ CloudFrontDefaultCertificate: true });
+  });
+
+  it('outputs the site address, bucket name and distribution id (and still no key)', () => {
+    expect(Object.keys(template.Outputs).sort()).toEqual(['ApiUrl', 'DistributionId', 'FunctionName', 'SiteBucketName', 'SiteUrl']);
+    expect(JSON.stringify(template.Outputs)).not.toContain('AnthropicApiKey');
   });
 });
